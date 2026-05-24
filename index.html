@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tattoo Gallery</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    :root {
+      --pico-font-size: 100%;
+    }
+    body {
+      min-height: 100vh;
+    }
+    header {
+      padding-top: 2rem;
+      text-align: center;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      padding: 2rem 0;
+    }
+    .gallery figure {
+      margin: 0;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .gallery figure:hover {
+      transform: scale(1.02);
+    }
+    .gallery img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--pico-border-radius);
+    }
+    .gallery figcaption {
+      text-align: center;
+      padding-top: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--pico-muted-color);
+    }
+
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .lightbox.open {
+      display: flex;
+    }
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 90vh;
+      object-fit: contain;
+      border-radius: var(--pico-border-radius);
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>✧ Tattoo Gallery ✧</h1>
+      <p>Custom tattoo sketches &amp; flash designs</p>
+    </header>
+
+    <div id="gallery" class="gallery">
+      <article aria-busy="true" style="text-align:center;padding:3rem;">
+        Loading gallery…
+      </article>
+    </div>
+
+    <footer style="text-align:center;padding-bottom:2rem;">
+      <p><small>more designs coming soon</small></p>
+    </footer>
+  </main>
+
+  <div id="lightbox" class="lightbox">
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <script>
+    (async function() {
+      const gallery = document.getElementById('gallery');
+      const lightbox = document.getElementById('lightbox');
+      const lightboxImg = document.getElementById('lightbox-img');
+
+      // --- Determine owner + repo from the Pages URL ---
+      // Pages URLs:  https://<owner>.github.io/<repo>/
+      // or:          https://<owner>.github.io/          (user/org site)
+      const host = window.location.hostname;       // e.g. "username.github.io"
+      const parts = window.location.pathname.split('/').filter(Boolean);
+
+      let owner, repo;
+      if (host.endsWith('.github.io')) {
+        owner = host.replace('.github.io', '');
+        // If there's a path segment, it's a project page; otherwise it's the user page (repo = owner.github.io)
+        repo = parts[0] || (owner + '.github.io');
+      } else {
+        // Fallback: use the first two path segments
+        owner = parts[0];
+        repo  = parts[1];
+      }
+
+      try {
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/images`;
+        const res = await fetch(apiUrl, {
+          headers: { Accept: 'application/vnd.github.v3+json' }
+        });
+
+        if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+
+        const files = await res.json();
+
+        // Filter to image files
+        const imageExts = ['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'];
+        const images = files.filter(f =>
+          f.type === 'file' && imageExts.some(ext => f.name.toLowerCase().endsWith(ext))
+        );
+
+        if (images.length === 0) {
+          gallery.innerHTML = `
+            <article style="text-align:center;padding:3rem;grid-column:1/-1;">
+              <p>No images yet — check back soon!</p>
+            </article>`;
+          return;
+        }
+
+        gallery.innerHTML = images.map(img => {
+          const name = img.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+          return `
+            <figure data-src="${img.download_url}">
+              <img src="${img.download_url}" alt="${name}" loading="lazy">
+              <figcaption>${name}</figcaption>
+            </figure>`;
+        }).join('');
+
+        // --- Lightbox ---
+        gallery.addEventListener('click', e => {
+          const figure = e.target.closest('figure');
+          if (!figure) return;
+          lightboxImg.src = figure.dataset.src;
+          lightbox.classList.add('open');
+          document.body.style.overflow = 'hidden';
+        });
+
+        lightbox.addEventListener('click', () => {
+          lightbox.classList.remove('open');
+          document.body.style.overflow = '';
+        });
+
+        document.addEventListener('keydown', e => {
+          if (e.key === 'Escape' && lightbox.classList.contains('open')) {
+            lightbox.classList.remove('open');
+            document.body.style.overflow = '';
+          }
+        });
+
+      } catch (err) {
+        console.error(err);
+        gallery.innerHTML = `
+          <article style="text-align:center;padding:3rem;grid-column:1/-1;">
+            <p>Couldn't load the gallery.</p>
+            <p><small>${err.message}</small></p>
+          </article>`;
+      }
+    })();
+  </script>
+</body>
+</html>
